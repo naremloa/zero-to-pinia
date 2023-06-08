@@ -1,0 +1,29 @@
+{
+  "name": "pinia",
+  "version": "1.0.0",
+  "description": "Intuitive, type safe and flexible Store for Vue",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@vue/devtools-api": "^6.5.0",
+    "vue-demi": ">=0.14.5"
+  },
+  "peerDependencies": {
+    "@vue/composition-api": "^1.4.0",
+    "typescript": ">=4.4.4",
+    "vue": "^2.6.14 || ^3.3.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    },
+    "@vue/composition-api": {
+      "optional": true
+    }
+  }
+}
