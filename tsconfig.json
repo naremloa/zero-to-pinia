@@ -1,5 +1,6 @@
 {
   "include": [
+    "packages/pinia/src/global.d.ts",
     "packages/*/src/**/*.ts",
   ],
   "compilerOptions": {
