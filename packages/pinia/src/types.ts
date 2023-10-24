@@ -31,33 +31,58 @@ export interface _StoreWithState<Id extends string, S extends StateTree>
   $state: UnwrapRef<S>
 }
 
+export type _StoreWithGetters<G> = {
+  readonly [k in keyof G]: G[k] extends (...args: any[]) => infer R
+    ? R // function
+    : UnwrapRef<G[k]> // computed
+}
+
 // store 對外公開的屬性
 export type Store<
   Id extends string = string,
-  S extends StateTree = {}
+  S extends StateTree = {},
+  G = {}
 > = _StoreWithState<Id, S> &
   // state
-  UnwrapRef<S>
+  UnwrapRef<S> &
+  _StoreWithGetters<G>
 
-export type StoreGeneric = Store<string, StateTree>
+export type StoreGeneric = Store<string, StateTree, _GettersTree<StateTree>>
 
 export interface StoreDefinition<
   Id extends string = string,
-  S extends StateTree = StateTree
+  S extends StateTree = StateTree,
+  G = _GettersTree<S>
 > {
-  (): Store<Id, S>
+  (): Store<Id, S, G>
 }
 
-export interface DefineStoreOptionsBase {}
-export interface DefineStoreOptions<Id extends string, S extends StateTree>
-  extends DefineStoreOptionsBase {
+export type _GettersTree<S extends StateTree> = Record<
+  string,
+  (state: UnwrapRef<S>) => any
+>
+
+export interface DefineStoreOptionsBase<S extends StateTree, Store> {}
+
+export interface DefineStoreOptions<Id extends string, S extends StateTree, G>
+  extends DefineStoreOptionsBase<S, Store<Id, S, G>> {
   id: Id
+
+  // state
   state?: () => S
+
+  // getters
+  getters?: G & ThisType<UnwrapRef<S> & _StoreWithGetters<G>> & _GettersTree<S>
 }
 
 // 從 setup option 中提取出 state 的 key
 export type _ExtractStateFromSetupStore_Keys<SS> = keyof {
   [K in keyof SS as SS[K] extends _Method | ComputedRef ? never : K]: any
+}
+
+// 從 setup option 中提取出 getter 的 key
+export type _ExtractGettersFromSetupStore_Keys<SS> = keyof {
+  [K in keyof SS as SS[K] extends ComputedRef ? K : never]: any
 }
 
 export type _UnwrapAll<SS> = { [K in keyof SS]: UnwrapRef<SS[K]> }
@@ -69,5 +94,15 @@ export type _ExtractStateFromSetupStore<SS> = SS extends undefined | void
   ? _UnwrapAll<Pick<SS, _ExtractStateFromSetupStore_Keys<SS>>>
   : never
 
-export interface DefineSetupStoreOptions<Id extends string, S extends StateTree>
-  extends DefineStoreOptionsBase {}
+// 從 setup option 中提取出 getters
+export type _ExtractGettersFromSetupStore<SS> = SS extends undefined | void
+  ? {}
+  : _ExtractGettersFromSetupStore_Keys<SS> extends keyof SS
+  ? Pick<SS, _ExtractGettersFromSetupStore_Keys<SS>>
+  : never
+
+export interface DefineSetupStoreOptions<
+  Id extends string,
+  S extends StateTree,
+  G
+> extends DefineStoreOptionsBase<S, Store<Id, S, G>> {}

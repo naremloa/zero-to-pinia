@@ -2,9 +2,11 @@ import {
   ComputedRef,
   EffectScope,
   UnwrapRef,
+  computed,
   effectScope,
   isReactive,
   isRef,
+  markRaw,
   reactive,
   toRefs,
 } from 'vue-demi'
@@ -17,7 +19,10 @@ import {
   StoreDefinition,
   StoreGeneric,
   _DeepPartial,
+  _ExtractGettersFromSetupStore,
   _ExtractStateFromSetupStore,
+  _GettersTree,
+  _Method,
   _StoreWithState,
 } from './types'
 
@@ -28,16 +33,20 @@ function isComputed(o: any): o is ComputedRef {
   return !!(isRef(o) && (o as any).effect)
 }
 
-function createOptionsStore<Id extends string, S extends StateTree>(
+function createOptionsStore<
+  Id extends string,
+  S extends StateTree,
+  G extends _GettersTree<S>
+>(
   id: Id,
-  options: DefineStoreOptions<Id, S>,
+  options: DefineStoreOptions<Id, S, G>,
   pinia: Pinia
-): Store<Id, S> {
-  const { state } = options
+): Store<Id, S, G> {
+  const { state, getters } = options
 
   const initialState: StateTree | undefined = pinia.state.value[id]
 
-  let store: Store<Id, S>
+  let store: Store<Id, S, G>
 
   function setup() {
     if (!initialState) {
@@ -46,7 +55,25 @@ function createOptionsStore<Id extends string, S extends StateTree>(
 
     const localState = toRefs(pinia.state.value[id])
 
-    return localState
+    return assign(
+      localState,
+      Object.keys(getters || {}).reduce((computedGetters, name) => {
+        if (__DEV__ && name in localState) {
+          console.warn(
+            `[🍍]: A getter cannot have the same name as another state property. Rename one of them. Found with "${name}" in store "${id}".`
+          )
+        }
+
+        computedGetters[name] = markRaw(
+          computed(() => {
+            const store = pinia._s.get(id)!
+            // @ts-expect-error
+            return getters![name].call(store, store)
+          })
+        )
+        return computedGetters
+      }, {} as Record<string, ComputedRef>)
+    )
   }
 
   store = createSetupStore(id, setup, options, pinia, true)
@@ -57,14 +84,17 @@ function createOptionsStore<Id extends string, S extends StateTree>(
 function createSetupStore<
   Id extends string,
   SS extends Record<any, unknown>,
-  S extends StateTree
+  S extends StateTree,
+  G extends Record<string, _Method>
 >(
   $id: Id,
   setup: () => SS,
-  options: DefineSetupStoreOptions<Id, S> | DefineStoreOptions<Id, S> = {},
+  options:
+    | DefineSetupStoreOptions<Id, S, G>
+    | DefineStoreOptions<Id, S, G> = {},
   pinia: Pinia,
   isOptionsStore?: boolean
-): Store<Id, S> {
+): Store<Id, S, G> {
   let scope!: EffectScope
 
   /**
@@ -84,7 +114,11 @@ function createSetupStore<
   const partialStore = {
     $id,
   } as _StoreWithState<Id, S>
-  const store: Store<Id, S> = reactive(partialStore) as unknown as Store<Id, S>
+  const store: Store<Id, S, G> = reactive(partialStore) as unknown as Store<
+    Id,
+    S,
+    G
+  >
 
   pinia._s.set($id, store)
 
@@ -136,18 +170,32 @@ function createSetupStore<
   return store
 }
 
-export function defineStore<Id extends string, S extends StateTree = {}>(
+export function defineStore<
+  Id extends string,
+  S extends StateTree = {},
+  G extends _GettersTree<S> = {}
+>(
   id: Id,
-  options: Omit<DefineStoreOptions<Id, S>, 'id'>
-): StoreDefinition<Id, S>
-export function defineStore<Id extends string, S extends StateTree = {}>(
-  options: DefineStoreOptions<Id, S>
-): StoreDefinition<Id, S>
+  options: Omit<DefineStoreOptions<Id, S, G>, 'id'>
+): StoreDefinition<Id, S, G>
+export function defineStore<
+  Id extends string,
+  S extends StateTree = {},
+  G extends _GettersTree<S> = {}
+>(options: DefineStoreOptions<Id, S, G>): StoreDefinition<Id, S, G>
 export function defineStore<Id extends string, SS>(
   id: Id,
   storeSetup: () => SS,
-  options?: DefineSetupStoreOptions<Id, _ExtractStateFromSetupStore<SS>>
-): StoreDefinition<Id>
+  options?: DefineSetupStoreOptions<
+    Id,
+    _ExtractStateFromSetupStore<SS>,
+    _ExtractGettersFromSetupStore<SS>
+  >
+): StoreDefinition<
+  Id,
+  _ExtractStateFromSetupStore<SS>,
+  _ExtractGettersFromSetupStore<SS>
+>
 export function defineStore(
   idOrOptions: any,
   setup?: any,
@@ -155,8 +203,8 @@ export function defineStore(
 ): StoreDefinition {
   let id: string
   let options:
-    | DefineStoreOptions<string, StateTree>
-    | DefineSetupStoreOptions<string, StateTree>
+    | DefineStoreOptions<string, StateTree, _GettersTree<StateTree>>
+    | DefineSetupStoreOptions<string, StateTree, _GettersTree<StateTree>>
 
   const isSetupStore = typeof setup === 'function'
   if (typeof idOrOptions === 'string') {

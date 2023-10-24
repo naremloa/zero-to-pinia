@@ -1,7 +1,8 @@
 <template>
   <h2>Counter Store</h2>
 
-  <p>Counter :{{ counter.count }}</p>
+  <p>Counter(state):{{ counter.count }}</p>
+  <p>Double(getter):{{ counter.double }}</p>
 
   <button @click="counter.count++">Increment</button>
 
